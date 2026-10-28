@@ -8,12 +8,12 @@ A [Flue](https://flueframework.com) agent project.
 npm install
 ```
 
-Then add a model provider API key to `.env` (any [provider Pi supports](https://pi.dev/docs/latest/providers#api-keys)).
+Then copy `.env.schema.example` to `.env.schema.local` and point it at the `staffy-automation-agents-local-env` 1Password item (see `.env.schema` for the variables).
 
 ## Talk to your agent
 
 ```sh
-npx flue run src/agents/bugfix.ts --message "Hi"
+npx varlock run -- npx flue run src/agents/bugfix.ts --message "Hi"
 ```
 
 Conversations are durable — pass `--id <id>` to continue one.
