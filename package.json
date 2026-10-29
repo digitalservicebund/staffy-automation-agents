@@ -5,11 +5,13 @@
 	"scripts": {
 		"check:types": "tsc --noEmit",
 		"asana:auth": "varlock run -- node scripts/asana-auth.ts",
-		"test": "node --test 'src/**/*.test.ts'"
+		"test": "node --test 'src/**/*.test.ts'",
+		"review:sweep": "varlock run -- node scripts/review-sweep.ts"
 	},
 	"dependencies": {
 		"@earendil-works/pi-ai": "^1.4.0",
-		"@flue/runtime": "^2.3.0"
+		"@flue/runtime": "^2.3.0",
+		"@modelcontextprotocol/sdk": "^1.30.0"
 	},
 	"devDependencies": {
 		"@flue/cli": "^2.3.0",

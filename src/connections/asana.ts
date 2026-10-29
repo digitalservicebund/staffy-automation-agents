@@ -6,7 +6,7 @@ export const ASANA_TOKEN_URL = 'https://app.asana.com/-/oauth_token';
 const EXPIRY_MARGIN_MS = 60_000;
 let cached: { token: string; expiresAt: number } | undefined;
 
-async function accessToken(): Promise<string> {
+export async function accessToken(): Promise<string> {
 	if (cached && Date.now() < cached.expiresAt) return cached.token;
 	const { ASANA_MCP_CLIENT_ID, ASANA_MCP_CLIENT_SECRET, ASANA_MCP_REFRESH_TOKEN } = process.env;
 	if (!ASANA_MCP_CLIENT_ID || !ASANA_MCP_CLIENT_SECRET || !ASANA_MCP_REFRESH_TOKEN) {
