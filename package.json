@@ -4,7 +4,8 @@
 	"type": "module",
 	"scripts": {
 		"check:types": "tsc --noEmit",
-		"asana:auth": "varlock run -- node scripts/asana-auth.ts"
+		"asana:auth": "varlock run -- node scripts/asana-auth.ts",
+		"test": "node --test 'src/**/*.test.ts'"
 	},
 	"dependencies": {
 		"@earendil-works/pi-ai": "^1.4.0",
