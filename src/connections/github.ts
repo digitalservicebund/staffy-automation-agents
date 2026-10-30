@@ -4,6 +4,8 @@ import type { CheckRun } from '../review.ts';
 const API = 'https://api.github.com';
 export const STAFFY_REPO = 'digitalservicebund/staffy';
 
+export const prUrl = (number: number) => `https://github.com/${STAFFY_REPO}/pull/${number}`;
+
 // Installation tokens live for an hour; refresh a minute early.
 const EXPIRY_MARGIN_MS = 60_000;
 let cached: { token: string; expiresAt: number } | undefined;

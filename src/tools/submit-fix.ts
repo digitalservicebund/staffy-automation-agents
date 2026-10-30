@@ -1,7 +1,7 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { connectAsana } from '../connections/asana-client.ts';
-import { openPr, STAFFY_REPO } from '../connections/github.ts';
+import { openPr, prUrl } from '../connections/github.ts';
 import { fixBranch, parseReviewPrs, reviewSubtaskName } from '../review.ts';
 import { commitAndPush, hasChanges } from '../workspace.ts';
 
@@ -38,11 +38,11 @@ export const submitFix = defineTool({
 
 			const subtasks = await asana.subtasks(data.ticketGid);
 			if (!subtasks.some((s) => parseReviewPrs(s.name).includes(pr))) {
-				const notes = `PR: https://github.com/${STAFFY_REPO}/pull/${pr}\n\nMark this subtask complete to approve and merge. Comment here to request changes.\n\n${data.summary}`;
+				const notes = `PR: ${prUrl(pr)}\n\nMark this subtask complete to approve and merge. Comment here to request changes.\n\n${data.summary}`;
 				await asana.createSubtask(data.ticketGid, reviewSubtaskName([pr]), notes);
 			}
 			await asana.moveToSection(data.ticketGid, projectGid, await asana.sectionGid(projectGid, READY_SECTION));
-			await asana.comment(data.ticketGid, `Staffy Bot opened staffy#${pr} for review.`);
+			await asana.comment(data.ticketGid, `Staffy Bot opened a PR for review: ${prUrl(pr)}\n\nMark the "Review: staffy#${pr}" subtask complete to approve and merge.`);
 			return `Submitted staffy#${pr}; ticket moved to "${READY_SECTION}".`;
 		} finally {
 			await asana.close();

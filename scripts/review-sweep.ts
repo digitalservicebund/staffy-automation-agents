@@ -6,7 +6,7 @@
 // Dry run by default; pass --apply to comment, merge and move tickets.
 import { evaluateApproval } from '../src/approval.ts';
 import { connectAsana, type AsanaClient } from '../src/connections/asana-client.ts';
-import { checkRuns, commentOnPr, getPr, headCommittedAt, mergePr, type PullRequest } from '../src/connections/github.ts';
+import { checkRuns, commentOnPr, getPr, headCommittedAt, mergePr, prUrl, type PullRequest } from '../src/connections/github.ts';
 import { ciState, decideReview, parseReviewPrs, type CiState } from '../src/review.ts';
 
 const READY_SECTION = 'Ready for Review';
@@ -40,7 +40,7 @@ async function merge(asana: AsanaClient, ticketGid: string, subtaskGid: string, 
 		await mergePr(pr.number, pr.head.sha);
 	}
 	await asana.moveToSection(ticketGid, projectGid!, doneGid); // checked non-empty at startup
-	await asana.comment(ticketGid, `Merged ${open.map((pr) => `staffy#${pr.number}`).join(', ')} after approval.`);
+	await asana.comment(ticketGid, `Merged after approval:\n${open.map((pr) => prUrl(pr.number)).join('\n')}`);
 }
 
 async function sweepTicket(asana: AsanaClient, ticket: { gid: string; name: string }, doneGid: string) {
