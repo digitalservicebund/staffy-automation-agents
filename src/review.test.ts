@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ciState, decideReview, fixBranch, parseReviewPrs, reviewSubtaskName } from './review.ts';
+import { botTitle, ciState, decideReview, fixBranch, parseReviewPrs, reviewSubtaskName } from './review.ts';
 import type { ApprovalResult } from './approval.ts';
 
 test('review subtask name round-trips its PR numbers', () => {
@@ -57,4 +57,10 @@ test('fix branch rejects anything but a numeric GID', () => {
 	for (const bad of ['', 'abc', '123; rm -rf /', '../main', '12 34']) {
 		assert.throws(() => fixBranch(bad));
 	}
+});
+
+test('bot title adds the 🤖 prefix once', () => {
+	assert.equal(botTitle('Levels are not saved'), '🤖 Levels are not saved');
+	assert.equal(botTitle('🤖 Levels are not saved'), '🤖 Levels are not saved');
+	assert.equal(botTitle('  Levels are not saved '), '🤖 Levels are not saved');
 });

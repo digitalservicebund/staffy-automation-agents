@@ -3,6 +3,7 @@ import { CODING_MODEL, TRIAGE_MODEL } from '../providers/stackit.ts';
 import { useMcpConnection, useModel, useSandbox, useSubagent, useTool } from '@flue/runtime';
 import { local } from '@flue/runtime/node';
 import { asana } from '../connections/asana.ts';
+import { startFix } from '../tools/start-fix.ts';
 import { submitFix } from '../tools/submit-fix.ts';
 import { WORKDIR } from '../workspace.ts';
 
@@ -34,10 +35,11 @@ export function Bugfix() {
 	useModel(TRIAGE_MODEL);
 	// No secrets in the model's shell: local() passes only PATH/HOME-style essentials.
 	useSandbox(local({ cwd: WORKDIR }));
-	// Asana exposes ~50 tools; mount only what triage needs (no delete, no project edits).
+	// Asana exposes ~50 tools; mount only what triage needs. Ticket edits (title, section) go
+	// through start_fix / submit_fix, so the model gets no update/delete tools.
 	useMcpConnection({
 		...asana,
-		tools: ['get_project', 'get_tasks', 'search_tasks', 'get_task', 'get_task_stories', 'update_tasks', 'add_comment', 'get_user'],
+		tools: ['get_project', 'get_tasks', 'search_tasks', 'get_task', 'get_task_stories', 'add_comment', 'get_user'],
 	});
 	useSubagent({
 		name: 'coder',
@@ -45,14 +47,16 @@ export function Bugfix() {
 		agent: Coder,
 		model: CODING_MODEL,
 	});
+	useTool(startFix);
 	useTool(submitFix);
 	return [
 		'You triage bugs in Staffy, a Nuxt 4 + Prisma staffing app.',
 		`Bug tickets live in Asana project ${projectGid}.`,
 		'1. Read the ticket and its comments.',
-		'2. Delegate the fix to the `coder` subagent with a complete brief:',
-		'   reported behaviour, expected behaviour, reproduction steps, and relevant comments.',
-		'3. If the coder reports passing tests, call `submit_fix` with the ticket GID, a conventional-commit PR title, and a summary.',
+		'2. Call `start_fix` with a plain-language approach for the team: what is wrong, the likely cause, the planned fix, and how it will be tested.',
+		'3. Delegate the fix to the `coder` subagent with a complete brief:',
+		'   reported behaviour, expected behaviour, reproduction steps, relevant comments, and the approach you posted.',
+		'4. If the coder reports passing tests, call `submit_fix` with the ticket GID, a conventional-commit PR title, and a summary.',
 		'   If it could not fix the bug, comment on the ticket explaining why and stop.',
 		'Do not write code yourself.',
 	].join('\n');

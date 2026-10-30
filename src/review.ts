@@ -43,3 +43,11 @@ export function fixBranch(ticketGid: string): string {
 	if (!/^\d+$/.test(ticketGid)) throw new Error(`Not an Asana task GID: ${JSON.stringify(ticketGid)}`);
 	return `bot/asana-${ticketGid}`;
 }
+
+const BOT_PREFIX = '🤖 ';
+
+// Marks a ticket as being worked on by the bot. Idempotent across revisions.
+export function botTitle(name: string): string {
+	const trimmed = name.trim();
+	return trimmed.startsWith(BOT_PREFIX) ? trimmed : `${BOT_PREFIX}${trimmed}`;
+}
