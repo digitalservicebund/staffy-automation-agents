@@ -11,7 +11,7 @@
 	"dependencies": {
 		"@earendil-works/pi-ai": "^1.4.0",
 		"@flue/runtime": "^2.3.0",
-		"@modelcontextprotocol/sdk": "^1.30.0"
+		"@modelcontextprotocol/sdk": "^1.32.0"
 	},
 	"devDependencies": {
 		"@flue/cli": "^2.3.0",
