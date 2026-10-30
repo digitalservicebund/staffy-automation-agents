@@ -64,6 +64,15 @@ export async function headCommittedAt(sha: string): Promise<string> {
 	return (await staffy<{ commit: { committer: { date: string } } }>(`/commits/${sha}`)).commit.committer.date;
 }
 
+// Reuses the open PR for `branch` if there is one (a revision push), else opens it.
+export async function openPr(branch: string, title: string, body: string): Promise<number> {
+	const owner = STAFFY_REPO.split('/')[0];
+	const [existing] = await staffy<PullRequest[]>(`/pulls?state=open&head=${owner}:${encodeURIComponent(branch)}`);
+	if (existing) return existing.number;
+	const pr = await staffy<PullRequest>('/pulls', { method: 'POST', body: JSON.stringify({ head: branch, base: 'main', title, body }) });
+	return pr.number;
+}
+
 export async function commentOnPr(number: number, body: string): Promise<void> {
 	await staffy(`/issues/${number}/comments`, { method: 'POST', body: JSON.stringify({ body }) });
 }

@@ -36,3 +36,10 @@ export function decideReview(approval: ApprovalResult, ci: CiState): ReviewActio
 	if (ci === 'success') return { action: 'merge', approverGid: approval.approverGid };
 	return ci === 'failure' ? { action: 'ci_failed' } : { action: 'wait' };
 }
+
+// One branch per ticket, so a revision pushes to the same PR. The GID is
+// model-supplied, so only digits get anywhere near a git ref.
+export function fixBranch(ticketGid: string): string {
+	if (!/^\d+$/.test(ticketGid)) throw new Error(`Not an Asana task GID: ${JSON.stringify(ticketGid)}`);
+	return `bot/asana-${ticketGid}`;
+}

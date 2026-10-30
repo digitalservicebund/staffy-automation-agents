@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ciState, decideReview, parseReviewPrs, reviewSubtaskName } from './review.ts';
+import { ciState, decideReview, fixBranch, parseReviewPrs, reviewSubtaskName } from './review.ts';
 import type { ApprovalResult } from './approval.ts';
 
 test('review subtask name round-trips its PR numbers', () => {
@@ -47,4 +47,14 @@ test('changes requested go back to the agent regardless of CI', () => {
 
 test('waits while approval is pending', () => {
 	assert.deepEqual(decideReview({ status: 'pending' }, 'success'), { action: 'wait' });
+});
+
+test('fix branch is derived from the ticket GID', () => {
+	assert.equal(fixBranch('1215062944661222'), 'bot/asana-1215062944661222');
+});
+
+test('fix branch rejects anything but a numeric GID', () => {
+	for (const bad of ['', 'abc', '123; rm -rf /', '../main', '12 34']) {
+		assert.throws(() => fixBranch(bad));
+	}
 });

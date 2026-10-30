@@ -6,7 +6,8 @@
 		"check:types": "tsc --noEmit",
 		"asana:auth": "varlock run -- node scripts/asana-auth.ts",
 		"test": "node --test 'src/**/*.test.ts'",
-		"review:sweep": "varlock run -- node scripts/review-sweep.ts"
+		"review:sweep": "varlock run -- node scripts/review-sweep.ts",
+		"checkout:prepare": "varlock run -- node scripts/prepare-checkout.ts"
 	},
 	"dependencies": {
 		"@earendil-works/pi-ai": "^1.4.0",
