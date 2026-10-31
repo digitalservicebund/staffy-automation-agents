@@ -5,6 +5,8 @@ import {
 	INITIAL_STATE,
 	LIMITS,
 	parseState,
+	recordDispatchFailure,
+	unstick,
 	serializeState,
 	type BotState,
 	type Observation,
@@ -49,6 +51,7 @@ test('first CI failure triggers one automated fix', () => {
 	assert.deepEqual(next, {
 		action: 'fix_ci',
 		failedChecks: ['typecheck'],
+		feedback: [],
 		state: { ciFixes: 1, feedbackRounds: 0, revising: { since: LATER, reason: 'ci' } },
 	});
 });
@@ -118,4 +121,29 @@ test('merges when approved, CI green and no outstanding feedback', () => {
 test('halted PRs are left alone', () => {
 	const state: BotState = { ...INITIAL_STATE, halted: 'CI failed twice' };
 	assert.deepEqual(decideNext(state, obs({ prFeedback: ['please'] })), { action: 'wait' });
+});
+
+test('a failed agent dispatch refunds the attempt and clears the in-flight flag', () => {
+	const inFlight: BotState = { ciFixes: 1, feedbackRounds: 0, revising: { since: PUSH, reason: 'ci' } };
+	assert.deepEqual(recordDispatchFailure(inFlight, 'sandbox not allowed'), { ciFixes: 0, feedbackRounds: 0, dispatchFailures: 1 });
+	const feedback: BotState = { ciFixes: 0, feedbackRounds: 2, revising: { since: PUSH, reason: 'feedback' } };
+	assert.equal(recordDispatchFailure(feedback, 'x').feedbackRounds, 1);
+});
+
+test('repeated dispatch failures halt automation', () => {
+	const state: BotState = { ciFixes: 1, feedbackRounds: 0, dispatchFailures: LIMITS.dispatchFailures - 1, revising: { since: PUSH, reason: 'ci' } };
+	const next = recordDispatchFailure(state, 'agent crashed');
+	assert.match(next.halted ?? '', /agent crashed/);
+	assert.equal(next.revising, undefined);
+});
+
+test('unstick clears a stuck revision or halt and refunds the in-flight attempt', () => {
+	assert.deepEqual(unstick({ ciFixes: 1, feedbackRounds: 0, revising: { since: PUSH, reason: 'ci' } }), { ciFixes: 0, feedbackRounds: 0 });
+	assert.deepEqual(unstick({ ciFixes: 1, feedbackRounds: 3, halted: 'limit' }), { ciFixes: 1, feedbackRounds: 3 });
+});
+
+test('a CI fix also carries any outstanding reviewer feedback', () => {
+	const next = decideNext(INITIAL_STATE, obs({ ci: 'failure', failedChecks: ['static-analysis'], prFeedback: ['fix the type errors'] }));
+	assert.equal(next.action, 'fix_ci');
+	assert.deepEqual(next.action === 'fix_ci' && next.feedback, ['fix the type errors']);
 });

@@ -25,7 +25,7 @@ import {
 	writeBotState,
 	type PullRequest,
 } from '../src/connections/github.ts';
-import { decideNext, LIMITS, parseState, serializeState, type BotState, type Decision } from '../src/lifecycle.ts';
+import { decideNext, LIMITS, parseState, recordDispatchFailure, serializeState, unstick, type BotState, type Decision } from '../src/lifecycle.ts';
 import { ciState, fixBranch, parseReviewPrs, reviewSubtaskName, selectPrFeedback, type CheckRun } from '../src/review.ts';
 import { prepareCheckout } from '../src/workspace.ts';
 
@@ -35,6 +35,11 @@ const DONE_SECTION = 'Complete';
 const MAX_DISPATCHES_PER_RUN = 1;
 
 const apply = process.argv.includes('--apply');
+// `--unstick <pr>`: clear a stuck revision or halt on one PR (refunding the in-flight attempt), then exit.
+const unstickIndex = process.argv.indexOf('--unstick');
+const unstickPr = unstickIndex === -1 ? undefined : Number(process.argv[unstickIndex + 1]);
+// Same rule the agent enforces at startup; checked here so we never record an attempt we can't run.
+const canDispatch = Boolean(process.env.CI) || process.env.ALLOW_LOCAL_SANDBOX === 'true';
 const env = (name: string) => (process.env[name] ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 const projectGid = process.env.ASANA_BUG_PROJECT_GID ?? '';
 const approverGids = env('ASANA_APPROVER_GIDS');
@@ -44,7 +49,7 @@ if (!projectGid || approverGids.length === 0 || approverLogins.length === 0) {
 }
 
 type Ticket = { gid: string; name: string };
-type Context = { asana: AsanaClient; ticket: Ticket; pr: PullRequest; runs: CheckRun[]; stateCommentId?: number };
+type Context = { asana: AsanaClient; ticket: Ticket; pr: PullRequest; runs: CheckRun[]; stateCommentId?: number; state: BotState };
 let dispatched = 0;
 
 async function observe(asana: AsanaClient, ticket: Ticket, pr: PullRequest) {
@@ -81,13 +86,28 @@ async function observe(asana: AsanaClient, ticket: Ticket, pr: PullRequest) {
 
 async function saveState(ctx: Context, state: BotState) {
 	const body = `Staffy Bot automation state — edited automatically, please don't change.\n\n${serializeState(state)}`;
-	await writeBotState(ctx.pr.number, ctx.stateCommentId, body);
+	ctx.stateCommentId = await writeBotState(ctx.pr.number, ctx.stateCommentId, body);
+	ctx.state = state;
 }
 
 const say = (ctx: Context, text: string) => ctx.asana.comment(ctx.ticket.gid, `${BOT_MARK} ${text}`);
 
-// Runs the agent on the existing PR branch. The agent's own tools push the result.
+// Runs the agent on the existing PR branch; its own tools push the result. If
+// the run fails, the attempt is refunded and the PR unlocked (repeated
+// failures halt), instead of waiting out the revision timeout.
 async function dispatchRevision(ctx: Context, brief: string) {
+	try {
+		await runAgent(ctx, brief);
+	} catch (err) {
+		const error = err instanceof Error ? err.message.split('\n')[0] : String(err);
+		const next = recordDispatchFailure(ctx.state, error);
+		await saveState(ctx, next);
+		const outcome = next.halted ? `Automation stopped: ${next.halted}. A human needs to take over.` : 'The attempt was not counted; the next sweep will retry.';
+		await say(ctx, `The automated revision of ${prUrl(ctx.pr.number)} failed to run (${error}). ${outcome}`);
+	}
+}
+
+async function runAgent(ctx: Context, brief: string) {
 	await prepareCheckout(fixBranch(ctx.ticket.gid));
 	const message = [
 		`Revise the open PR ${prUrl(ctx.pr.number)} for Asana ticket ${ctx.ticket.gid}.`,
@@ -138,12 +158,16 @@ async function act(ctx: Context, decision: Decision) {
 			// Persist the attempt before dispatching, so a crash can't cause a second one.
 			await saveState(ctx, decision.state);
 			await say(ctx, `Checks failed on ${url} (${decision.failedChecks.join(', ')}). Submitting an automated fix (attempt ${decision.state.ciFixes} of ${LIMITS.ciFixes}).`);
-			return dispatchRevision(ctx, `CI failed. Failing checks and log tails:\n\n${await failedCheckLogs(ctx.runs)}`);
+			return dispatchRevision(ctx, [`CI failed. Failing checks and log tails:\n\n${await failedCheckLogs(ctx.runs)}`, feedbackBrief(decision.feedback)].join('\n\n'));
 		case 'revise':
 			await saveState(ctx, decision.state);
 			await say(ctx, `Revising ${url} based on reviewer feedback (round ${decision.state.feedbackRounds} of ${LIMITS.feedbackRounds}).`);
-			return dispatchRevision(ctx, `Reviewer feedback:\n\n${decision.feedback.map((f) => `- ${f}`).join('\n')}`);
+			return dispatchRevision(ctx, feedbackBrief(decision.feedback));
 	}
+}
+
+function feedbackBrief(feedback: string[]): string {
+	return feedback.length === 0 ? '' : `Reviewer feedback:\n\n${feedback.map((f) => `- ${f}`).join('\n')}`;
 }
 
 async function sweepTicket(asana: AsanaClient, ticket: Ticket) {
@@ -152,11 +176,25 @@ async function sweepTicket(asana: AsanaClient, ticket: Ticket) {
 	const { runs, state, stateCommentId, observation } = await observe(asana, ticket, pr);
 	const decision = decideNext(state, observation);
 	const needsAgent = decision.action === 'fix_ci' || decision.action === 'revise';
-	const deferred = needsAgent && dispatched >= MAX_DISPATCHES_PER_RUN;
-	console.log(`${ticket.gid} staffy#${pr.number}: ${decision.action}${deferred ? ' (deferred to next run)' : ''}${apply ? '' : ' (dry run)'}`);
-	if (!apply || deferred) return;
+	const deferral = !needsAgent ? '' : !canDispatch ? 'agent not allowed on this host; set ALLOW_LOCAL_SANDBOX=true' : dispatched >= MAX_DISPATCHES_PER_RUN ? 'one agent run per sweep' : '';
+	console.log(`${ticket.gid} staffy#${pr.number}: ${decision.action}${deferral ? ` (deferred: ${deferral})` : ''}${apply ? '' : ' (dry run)'}`);
+	if (!apply || deferral) return;
 	if (needsAgent) dispatched++;
-	await act({ asana, ticket, pr, runs, stateCommentId }, decision);
+	await act({ asana, ticket, pr, runs, stateCommentId, state }, decision);
+}
+
+async function unstickPullRequest(number: number) {
+	const { commentId, body } = await readBotState(number);
+	if (commentId === undefined) throw new Error(`staffy#${number} has no Staffy Bot state comment`);
+	const next = unstick(parseState(body));
+	await writeBotState(number, commentId, `Staffy Bot automation state — edited automatically, please don't change.\n\n${serializeState(next)}`);
+	console.log(`staffy#${number} unstuck: ${JSON.stringify(next)}`);
+}
+
+if (unstickPr !== undefined) {
+	if (!Number.isInteger(unstickPr) || unstickPr <= 0) throw new Error('Usage: --unstick <PR number>');
+	await unstickPullRequest(unstickPr);
+	process.exit(0);
 }
 
 const asana = await connectAsana();

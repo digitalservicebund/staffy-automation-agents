@@ -11,12 +11,15 @@ export const LIMITS = {
 	feedbackRounds: 3,
 	// A dispatched revision that hasn't pushed within this window is presumed dead.
 	revisionTimeoutMs: 2 * 60 * 60 * 1000,
+	// Agent runs that crash or can't start, per PR. Each is refunded; this many halts.
+	dispatchFailures: 2,
 } as const;
 
 // Persisted per PR, in a hidden marker in a Staffy Bot comment.
 export type BotState = {
 	ciFixes: number;
 	feedbackRounds: number;
+	dispatchFailures?: number;
 	revising?: { since: string; reason: 'ci' | 'feedback' };
 	halted?: string;
 };
@@ -39,7 +42,7 @@ export type Decision =
 	| { action: 'wait' }
 	| { action: 'save'; state: BotState }
 	| { action: 'create_review' }
-	| { action: 'fix_ci'; failedChecks: string[]; state: BotState }
+	| { action: 'fix_ci'; failedChecks: string[]; feedback: string[]; state: BotState }
 	| { action: 'revise'; feedback: string[]; state: BotState }
 	| { action: 'merge'; approverGid: string }
 	| { action: 'halt'; reason: string; state: BotState };
@@ -95,7 +98,7 @@ export function decideNext(current: BotState, o: Observation): Decision {
 			return halt(state, `CI still failing after ${LIMITS.ciFixes} automated fix (${o.failedChecks.join(', ')})`);
 		}
 		const next = { ...state, ciFixes: state.ciFixes + 1, revising: { since: o.now, reason: 'ci' as const } };
-		return { action: 'fix_ci', failedChecks: o.failedChecks, state: next };
+		return { action: 'fix_ci', failedChecks: o.failedChecks, feedback: feedbackOf(o), state: next };
 	}
 
 	const feedback = feedbackOf(o);
@@ -110,4 +113,26 @@ export function decideNext(current: BotState, o: Observation): Decision {
 	if (!o.hasReviewSubtask) return { action: 'create_review' };
 	if (o.approval.status === 'approved') return { action: 'merge', approverGid: o.approval.approverGid };
 	return { action: 'wait' };
+}
+
+// Drops the in-flight revision and gives back the attempt it consumed.
+function refund(state: BotState): BotState {
+	const { revising, ...rest } = state;
+	if (!revising) return rest;
+	const counter = revising.reason === 'ci' ? 'ciFixes' : 'feedbackRounds';
+	return { ...rest, [counter]: Math.max(0, rest[counter] - 1) };
+}
+
+// The agent run never pushed because it crashed or couldn't start. That
+// shouldn't burn an attempt or leave the PR locked, but repeated failures halt.
+export function recordDispatchFailure(state: BotState, error: string): BotState {
+	const failures = (state.dispatchFailures ?? 0) + 1;
+	const next = { ...refund(state), dispatchFailures: failures };
+	return failures >= LIMITS.dispatchFailures ? { ...next, halted: `the agent failed to run ${failures} times (last: ${error})` } : next;
+}
+
+// Manual override (`review:sweep --unstick <pr>`): resumes a halted or stuck PR.
+export function unstick(state: BotState): BotState {
+	const { halted: _halted, dispatchFailures: _failures, ...rest } = refund(state);
+	return rest;
 }

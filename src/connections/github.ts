@@ -75,8 +75,8 @@ export async function openPr(branch: string, title: string, body: string): Promi
 	return pr.number;
 }
 
-export async function commentOnPr(number: number, body: string): Promise<void> {
-	await staffy(`/issues/${number}/comments`, { method: 'POST', body: JSON.stringify({ body }) });
+export async function commentOnPr(number: number, body: string): Promise<number> {
+	return (await staffy<{ id: number }>(`/issues/${number}/comments`, { method: 'POST', body: JSON.stringify({ body }) })).id;
 }
 
 // Pinning `sha` makes GitHub refuse the merge if anything was pushed after
@@ -136,9 +136,11 @@ export async function readBotState(number: number): Promise<{ commentId?: number
 	return { commentId: mine?.id, body: mine?.body ?? '' };
 }
 
-export async function writeBotState(number: number, commentId: number | undefined, body: string): Promise<void> {
-	if (commentId === undefined) await commentOnPr(number, body);
-	else await staffy(`/issues/comments/${commentId}`, { method: 'PATCH', body: JSON.stringify({ body }) });
+// Returns the state comment id, so later writes in the same run edit it.
+export async function writeBotState(number: number, commentId: number | undefined, body: string): Promise<number> {
+	if (commentId === undefined) return commentOnPr(number, body);
+	await staffy(`/issues/comments/${commentId}`, { method: 'PATCH', body: JSON.stringify({ body }) });
+	return commentId;
 }
 
 // Slug of this GitHub App, e.g. for recognising its own comments.
