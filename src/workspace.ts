@@ -19,7 +19,7 @@ async function authArgs(): Promise<string[]> {
 }
 
 async function git(args: string[], { auth = false, cwd = WORKDIR } = {}): Promise<string> {
-	const { stdout } = await run('git', [...(auth ? await authArgs() : []), ...args], { cwd });
+	const { stdout } = await run('git', [...(auth ? await authArgs() : []), ...args], { cwd, maxBuffer: 64 * 1024 * 1024 });
 	return stdout.trim();
 }
 
@@ -45,4 +45,10 @@ export async function commitAndPush(branch: string, message: string): Promise<st
 	await git(['-c', `user.name=${BOT_NAME}`, '-c', 'user.email=staffy-bot[bot]@users.noreply.github.com', 'commit', '--quiet', '-m', message]);
 	await git(['push', '--quiet', '--force-with-lease', 'origin', `HEAD:refs/heads/${branch}`], { auth: true });
 	return git(['rev-parse', 'HEAD']);
+}
+
+// The PR's changes so far, relative to main.
+export async function branchDiff(): Promise<string> {
+	await git(['fetch', '--quiet', 'origin', 'main'], { auth: true });
+	return git(['diff', 'origin/main...HEAD']);
 }

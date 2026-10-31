@@ -95,6 +95,16 @@ export async function connectAsana() {
 			return res.data.projects?.some((p) => p.gid === projectGid) ?? false;
 		},
 
+		async taskDetails(taskGid: string): Promise<{ name: string; notes: string }> {
+			const res = await call<{ data: { name: string; notes?: string } }>('get_task', {
+				task_id: taskGid,
+				opt_fields: 'name,notes',
+				include_subtasks: false,
+				include_comments: false,
+			});
+			return { name: res.data.name, notes: res.data.notes ?? '' };
+		},
+
 		async taskName(taskGid: string): Promise<string> {
 			const res = await call<{ data: { name: string } }>('get_task', {
 				task_id: taskGid,

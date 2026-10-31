@@ -52,7 +52,14 @@ async function staffy<T>(path: string, init: RequestInit = {}): Promise<T> {
 	return (await res.json()) as T;
 }
 
-export type PullRequest = { number: number; state: 'open' | 'closed'; merged: boolean; head: { sha: string } };
+export type PullRequest = {
+	number: number;
+	state: 'open' | 'closed';
+	merged: boolean;
+	title: string;
+	body: string | null;
+	head: { sha: string };
+};
 
 export const getPr = (number: number) => staffy<PullRequest>(`/pulls/${number}`);
 
