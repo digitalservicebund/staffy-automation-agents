@@ -21,6 +21,11 @@ type Options = {
 	since: string;
 };
 
+// Every Asana comment the bot posts starts with this. The bot's Asana token
+// acts as a real user (possibly an approver), so this is how its own comments
+// are told apart from human feedback.
+export const BOT_MARK = '🤖';
+
 // Activity that changes the decision. Anything else (assignments, edits) is ignored.
 const DECISIVE = new Set(['marked_complete', 'marked_incomplete', 'comment_added']);
 
@@ -28,6 +33,7 @@ export function evaluateApproval(stories: readonly Story[], { approverGids, sinc
 	const sinceMs = Date.parse(since);
 	const relevant = stories
 		.filter((s) => DECISIVE.has(s.resource_subtype))
+		.filter((s) => !(s.resource_subtype === 'comment_added' && s.text.trimStart().startsWith(BOT_MARK)))
 		.filter((s) => s.created_by !== null && approverGids.includes(s.created_by.gid))
 		.filter((s) => Date.parse(s.created_at) > sinceMs)
 		.sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));

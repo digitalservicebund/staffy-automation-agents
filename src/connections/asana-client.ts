@@ -83,5 +83,44 @@ export async function connectAsana() {
 		async comment(taskGid: string, text: string): Promise<void> {
 			await call('add_comment', { task_id: taskGid, text });
 		},
+
+		// Whether `taskGid` is a top-level ticket on the given board.
+		async isTaskInProject(taskGid: string, projectGid: string): Promise<boolean> {
+			const res = await call<{ data: { projects?: { gid: string }[] } }>('get_task', {
+				task_id: taskGid,
+				opt_fields: 'projects.gid',
+				include_subtasks: false,
+				include_comments: false,
+			});
+			return res.data.projects?.some((p) => p.gid === projectGid) ?? false;
+		},
+
+		async taskDetails(taskGid: string): Promise<{ name: string; notes: string }> {
+			const res = await call<{ data: { name: string; notes?: string } }>('get_task', {
+				task_id: taskGid,
+				opt_fields: 'name,notes',
+				include_subtasks: false,
+				include_comments: false,
+			});
+			return { name: res.data.name, notes: res.data.notes ?? '' };
+		},
+
+		async taskName(taskGid: string): Promise<string> {
+			const res = await call<{ data: { name: string } }>('get_task', {
+				task_id: taskGid,
+				opt_fields: 'name',
+				include_subtasks: false,
+				include_comments: false,
+			});
+			return res.data.name;
+		},
+
+		async rename(taskGid: string, name: string): Promise<void> {
+			await call('update_tasks', { tasks: [{ task: taskGid, name }] });
+		},
+
+		async createSubtask(parentGid: string, name: string, notes: string): Promise<void> {
+			await call('create_tasks', { tasks: [{ parent: parentGid, name, notes }] });
+		},
 	};
 }

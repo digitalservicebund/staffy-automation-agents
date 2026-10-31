@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { evaluateApproval, type Story } from './approval.ts';
+import { BOT_MARK, evaluateApproval, type Story } from './approval.ts';
 
 const APPROVER = '100';
 const OTHER = '200';
@@ -68,4 +68,17 @@ test('reopening the subtask revokes the approval', () => {
 		story('marked_incomplete', APPROVER, '2026-10-29T12:00:00.000Z'),
 	];
 	assert.deepEqual(evaluateApproval(stories, opts), { status: 'pending' });
+});
+
+test("ignores the bot's own comments, which Asana attributes to the approver's account", () => {
+	const stories = [story('comment_added', APPROVER, '2026-10-29T11:00:00.000Z', `${BOT_MARK} Staffy Bot pushed a revision.`)];
+	assert.deepEqual(evaluateApproval(stories, opts), { status: 'pending' });
+});
+
+test('a bot comment after an approval does not revoke it', () => {
+	const stories = [
+		story('marked_complete', APPROVER, '2026-10-29T11:00:00.000Z'),
+		story('comment_added', APPROVER, '2026-10-29T12:00:00.000Z', `${BOT_MARK} Merged after approval.`),
+	];
+	assert.equal(evaluateApproval(stories, opts).status, 'approved');
 });
