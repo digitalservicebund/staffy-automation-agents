@@ -1,6 +1,7 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { connectAsana } from '../connections/asana-client.ts';
+import { BOT_MARK } from '../approval.ts';
 import { botTitle } from '../review.ts';
 
 const IN_PROGRESS_SECTION = 'In Progress';
@@ -33,7 +34,7 @@ export const startFix = defineTool({
 			if (!(await asana.isTaskInProject(data.ticketGid, projectGid))) {
 				return `Ticket ${data.ticketGid} is not on the bug board; nothing was changed.`;
 			}
-			await asana.comment(data.ticketGid, `🤖 Staffy Bot is picking this up.\n\nPlanned approach:\n${data.approach}`);
+			await asana.comment(data.ticketGid, `${BOT_MARK} Staffy Bot is picking this up.\n\nPlanned approach:\n${data.approach}`);
 			await asana.rename(data.ticketGid, botTitle(await asana.taskName(data.ticketGid)));
 			await asana.moveToSection(data.ticketGid, projectGid, await asana.sectionGid(projectGid, IN_PROGRESS_SECTION));
 			return `Ticket claimed and moved to "${IN_PROGRESS_SECTION}". Now delegate to the coder.`;

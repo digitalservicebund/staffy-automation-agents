@@ -72,6 +72,14 @@ export type CoercedEnvSchema = {
   GITHUB_APP_PRIVATE_KEY: string;
   
   /**
+   * **GITHUB_APPROVER_LOGINS** 🔐 _sensitive_  
+   * Comma-separated GitHub logins whose PR comments and reviews on bot PRs are  
+   * treated as change requests. Everyone else's are ignored.  
+   * ![icon](data:image/svg+xml;utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2220%22%20height%3D%2220%22%20viewBox%3D%220%200%2032%2032%22%3E%3Cpath%20fill%3D%22%23808080%22%20d%3D%22M29%2022h-5a2.003%202.003%200%200%201-2-2v-6a2%202%200%200%201%202-2h5v2h-5v6h5ZM18%2012h-4V8h-2v14h6a2.003%202.003%200%200%200%202-2v-6a2%202%200%200%200-2-2m-4%208v-6h4v6Zm-6-8H3v2h5v2H4a2%202%200%200%200-2%202v2a2%202%200%200%200%202%202h6v-8a2%202%200%200%200-2-2m0%208H4v-2h4Z%22%2F%3E%3C%2Fsvg%3E)   
+   */
+  GITHUB_APPROVER_LOGINS: string;
+  
+  /**
    * **STAFFY_WORKDIR**  
    * Where the staffy checkout lives. Defaults to .work/staffy in this repo.  
    * ![icon](data:image/svg+xml;utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2220%22%20height%3D%2220%22%20viewBox%3D%220%200%2032%2032%22%3E%3Cpath%20fill%3D%22%23808080%22%20d%3D%22M29%2022h-5a2.003%202.003%200%200%201-2-2v-6a2%202%200%200%201%202-2h5v2h-5v6h5ZM18%2012h-4V8h-2v14h6a2.003%202.003%200%200%200%202-2v-6a2%202%200%200%200-2-2m-4%208v-6h4v6Zm-6-8H3v2h5v2H4a2%202%200%200%200-2%202v2a2%202%200%200%200%202%202h6v-8a2%202%200%200%200-2-2m0%208H4v-2h4Z%22%2F%3E%3C%2Fsvg%3E)   
@@ -88,11 +96,11 @@ export type CoercedEnvSchema = {
   
 };
 
-type _CoercedEnvSchema_110d96ed = CoercedEnvSchema;
+type _CoercedEnvSchema_4f6c7f2f = CoercedEnvSchema;
 
 declare module 'varlock/env' {
-  export interface TypedEnvSchema extends Readonly<_CoercedEnvSchema_110d96ed> {}
-  export interface PublicTypedEnvSchema extends Readonly<Pick<_CoercedEnvSchema_110d96ed, 'LLM_BASE_URL' | 'STAFFY_WORKDIR' | 'ALLOW_LOCAL_SANDBOX'>> {}
+  export interface TypedEnvSchema extends Readonly<_CoercedEnvSchema_4f6c7f2f> {}
+  export interface PublicTypedEnvSchema extends Readonly<Pick<_CoercedEnvSchema_4f6c7f2f, 'LLM_BASE_URL' | 'STAFFY_WORKDIR' | 'ALLOW_LOCAL_SANDBOX'>> {}
 }
 
 
@@ -102,17 +110,17 @@ export type EnvSchemaAsStrings = {
       : (NonNullable<CoercedEnvSchema[Property]> extends boolean ? ('true' | 'false') : string)
 };
 
-type _EnvSchemaAsStrings_110d96ed = EnvSchemaAsStrings;
+type _EnvSchemaAsStrings_4f6c7f2f = EnvSchemaAsStrings;
 declare global {
 
   // add types for global import.meta.env
-  interface ImportMetaEnv extends _EnvSchemaAsStrings_110d96ed {}
+  interface ImportMetaEnv extends _EnvSchemaAsStrings_4f6c7f2f {}
   interface ImportMeta {
     readonly env: ImportMetaEnv;
   }
 
   // add types for global process.env
   namespace NodeJS {
-    interface ProcessEnv extends _EnvSchemaAsStrings_110d96ed {}
+    interface ProcessEnv extends _EnvSchemaAsStrings_4f6c7f2f {}
   }
 }

@@ -1,15 +1,8 @@
-// Pure decisions for the review loop: which PRs a review subtask covers,
-// whether their CI is green, and what to do next. No I/O here.
-import type { ApprovalResult } from './approval.ts';
+// Pure helpers for bot PRs: review-subtask naming, CI state, fix branches,
+// ticket titles and PR feedback selection. No I/O here.
 
 export type CiState = 'pending' | 'success' | 'failure';
-export type CheckRun = { status: string; conclusion: string | null };
-
-export type ReviewAction =
-	| { action: 'wait' }
-	| { action: 'merge'; approverGid: string }
-	| { action: 'ci_failed' }
-	| { action: 'revise'; feedback: string[] };
+export type CheckRun = { id?: number; name?: string; status: string; conclusion: string | null; app?: { slug: string } };
 
 const REVIEW_PREFIX = '👀☑️ Review: ';
 const PR_REF = /staffy#(\d+)/g;
@@ -31,13 +24,6 @@ export function ciState(runs: readonly CheckRun[]): CiState {
 	return runs.every((r) => r.conclusion !== null && PASSING.has(r.conclusion)) ? 'success' : 'failure';
 }
 
-export function decideReview(approval: ApprovalResult, ci: CiState): ReviewAction {
-	if (approval.status === 'changes_requested') return { action: 'revise', feedback: approval.feedback };
-	if (approval.status === 'pending') return { action: 'wait' };
-	if (ci === 'success') return { action: 'merge', approverGid: approval.approverGid };
-	return ci === 'failure' ? { action: 'ci_failed' } : { action: 'wait' };
-}
-
 // One branch per ticket, so a revision pushes to the same PR. The GID is
 // model-supplied, so only digits get anywhere near a git ref.
 export function fixBranch(ticketGid: string): string {
@@ -51,4 +37,17 @@ const BOT_PREFIX = '🤖🔨 ';
 export function botTitle(name: string): string {
 	const trimmed = name.trim();
 	return trimmed.startsWith(BOT_PREFIX) ? trimmed : `${BOT_PREFIX}${trimmed}`;
+}
+
+export type PrFeedbackItem = { author: string; createdAt: string; body: string };
+
+// Human feedback on the PR that should drive a revision: allowlisted GitHub
+// logins only (the bot never is one), non-empty, and newer than the last push.
+export function selectPrFeedback(items: readonly PrFeedbackItem[], { logins, since }: { logins: readonly string[]; since: string }): string[] {
+	const allowed = new Set(logins.map((l) => l.toLowerCase()));
+	const sinceMs = Date.parse(since);
+	return items
+		.filter((i) => allowed.has(i.author.toLowerCase()) && Date.parse(i.createdAt) > sinceMs && i.body.trim() !== '')
+		.sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
+		.map((i) => i.body.trim());
 }

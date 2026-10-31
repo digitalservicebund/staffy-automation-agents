@@ -23,12 +23,13 @@ async function git(args: string[], { auth = false, cwd = WORKDIR } = {}): Promis
 	return stdout.trim();
 }
 
-// Fresh, clean checkout of origin/main with dependencies installed.
-export async function prepareCheckout(): Promise<void> {
+// Fresh, clean checkout with dependencies installed: origin/main for a new
+// fix, or the existing fix branch when revising an open PR.
+export async function prepareCheckout(branch = 'main'): Promise<void> {
 	const exists = await git(['rev-parse', '--is-inside-work-tree']).catch(() => '');
 	if (!exists) await git(['clone', '--quiet', REMOTE, WORKDIR], { auth: true, cwd: process.cwd() });
-	await git(['fetch', '--quiet', 'origin', 'main'], { auth: true });
-	await git(['checkout', '--quiet', '--force', '-B', 'main', 'origin/main']);
+	await git(['fetch', '--quiet', 'origin', branch], { auth: true });
+	await git(['checkout', '--quiet', '--force', '-B', branch, `origin/${branch}`]);
 	await git(['clean', '-fdx', '--quiet', '-e', 'node_modules']);
 	await run('npm', ['ci', '--no-audit', '--no-fund'], { cwd: WORKDIR });
 }
