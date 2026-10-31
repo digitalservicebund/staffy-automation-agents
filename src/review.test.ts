@@ -4,13 +4,14 @@ import { botTitle, ciState, decideReview, fixBranch, parseReviewPrs, reviewSubta
 import type { ApprovalResult } from './approval.ts';
 
 test('review subtask name round-trips its PR numbers', () => {
-	assert.equal(reviewSubtaskName([12, 13]), 'Review: staffy#12 staffy#13');
-	assert.deepEqual(parseReviewPrs('Review: staffy#12 staffy#13'), [12, 13]);
+	assert.equal(reviewSubtaskName([12, 13]), '👀☑️ Review: staffy#12 staffy#13');
+	assert.deepEqual(parseReviewPrs('👀☑️ Review: staffy#12 staffy#13'), [12, 13]);
 });
 
 test('non-review subtasks yield no PRs', () => {
 	assert.deepEqual(parseReviewPrs('Write docs for staffy#12'), []);
-	assert.deepEqual(parseReviewPrs('Review: nothing here'), []);
+	assert.deepEqual(parseReviewPrs('👀☑️ Review: nothing here'), []);
+	assert.deepEqual(parseReviewPrs('Review: staffy#12'), [], 'needs the 👀☑️ prefix');
 });
 
 test('CI is pending with no runs or with runs still in progress', () => {
@@ -59,8 +60,8 @@ test('fix branch rejects anything but a numeric GID', () => {
 	}
 });
 
-test('bot title adds the 🤖 prefix once', () => {
-	assert.equal(botTitle('Levels are not saved'), '🤖 Levels are not saved');
-	assert.equal(botTitle('🤖 Levels are not saved'), '🤖 Levels are not saved');
-	assert.equal(botTitle('  Levels are not saved '), '🤖 Levels are not saved');
+test('bot title adds the 🤖🔨 prefix once', () => {
+	assert.equal(botTitle('Levels are not saved'), '🤖🔨 Levels are not saved');
+	assert.equal(botTitle('🤖🔨 Levels are not saved'), '🤖🔨 Levels are not saved');
+	assert.equal(botTitle('  Levels are not saved '), '🤖🔨 Levels are not saved');
 });

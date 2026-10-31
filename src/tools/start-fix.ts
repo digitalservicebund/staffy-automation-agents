@@ -6,13 +6,13 @@ import { botTitle } from '../review.ts';
 const IN_PROGRESS_SECTION = 'In Progress';
 
 // Claims a ticket before any code is written: posts the planned approach for
-// humans, prefixes the title with 🤖, and moves it to "In Progress". The model
+// humans, prefixes the title with 🤖🔨, and moves it to "In Progress". The model
 // writes the approach; this code does the Asana writes.
 export const startFix = defineTool({
 	name: 'start_fix',
 	description:
 		'Claim an Asana bug ticket before delegating to the coder: posts your planned approach as a comment, ' +
-		'prefixes the title with 🤖, and moves the ticket to "In Progress". Call exactly once per ticket, before delegating.',
+		'prefixes the title with 🤖🔨, and moves the ticket to "In Progress". Call exactly once per ticket, before delegating.',
 	input: v.object({
 		ticketGid: v.pipe(v.string(), v.regex(/^\d+$/), v.description('GID of the Asana bug ticket.')),
 		approach: v.pipe(

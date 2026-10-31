@@ -11,17 +11,18 @@ export type ReviewAction =
 	| { action: 'ci_failed' }
 	| { action: 'revise'; feedback: string[] };
 
+const REVIEW_PREFIX = '👀☑️ Review: ';
 const PR_REF = /staffy#(\d+)/g;
 const PASSING = new Set(['success', 'skipped', 'neutral']);
 
 // The PR numbers live in the subtask name so the review loop can find them
 // without trusting free-text descriptions.
 export function reviewSubtaskName(prNumbers: readonly number[]): string {
-	return `Review: ${prNumbers.map((n) => `staffy#${n}`).join(' ')}`;
+	return `${REVIEW_PREFIX}${prNumbers.map((n) => `staffy#${n}`).join(' ')}`;
 }
 
 export function parseReviewPrs(name: string): number[] {
-	if (!name.startsWith('Review: ')) return [];
+	if (!name.startsWith(REVIEW_PREFIX)) return [];
 	return [...name.matchAll(PR_REF)].map((m) => Number(m[1]));
 }
 
@@ -44,7 +45,7 @@ export function fixBranch(ticketGid: string): string {
 	return `bot/asana-${ticketGid}`;
 }
 
-const BOT_PREFIX = '🤖 ';
+const BOT_PREFIX = '🤖🔨 ';
 
 // Marks a ticket as being worked on by the bot. Idempotent across revisions.
 export function botTitle(name: string): string {

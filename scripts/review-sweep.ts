@@ -1,5 +1,5 @@
 // Deterministic review loop — no model involved. For every ticket in "Ready
-// for Review", reads its "Review: staffy#N" subtask and merges the PRs once an
+// for Review", reads its "👀☑️ Review: staffy#N" subtask and merges the PRs once an
 // allowlisted approver has completed the subtask after the last push and CI
 // is green, then moves the ticket to "Complete".
 //

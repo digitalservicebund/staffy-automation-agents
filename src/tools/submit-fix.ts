@@ -14,7 +14,7 @@ export const submitFix = defineTool({
 	name: 'submit_fix',
 	description:
 		'Commit the current changes in the staffy checkout, push them as Staffy Bot, open (or update) the PR, ' +
-		'add a "Review: staffy#N" subtask to the ticket, and move the ticket to "Ready for Review". ' +
+		'add a "👀☑️ Review: staffy#N" subtask to the ticket, and move the ticket to "Ready for Review". ' +
 		'Call once the coder reports passing tests.',
 	input: v.object({
 		ticketGid: v.pipe(v.string(), v.description('GID of the Asana bug ticket being fixed.')),
@@ -42,7 +42,7 @@ export const submitFix = defineTool({
 				await asana.createSubtask(data.ticketGid, reviewSubtaskName([pr]), notes);
 			}
 			await asana.moveToSection(data.ticketGid, projectGid, await asana.sectionGid(projectGid, READY_SECTION));
-			await asana.comment(data.ticketGid, `Staffy Bot opened a PR for review: ${prUrl(pr)}\n\nMark the "Review: staffy#${pr}" subtask complete to approve and merge.`);
+			await asana.comment(data.ticketGid, `Staffy Bot opened a PR for review: ${prUrl(pr)}\n\nMark the "${reviewSubtaskName([pr])}" subtask complete to approve and merge.`);
 			return `Submitted staffy#${pr}; ticket moved to "${READY_SECTION}".`;
 		} finally {
 			await asana.close();
