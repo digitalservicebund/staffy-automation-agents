@@ -9,7 +9,8 @@ This is a [Flue](https://flueframework.com) project: agents are TypeScript funct
 
 ## Commands
 
-- `npx varlock run -- npx flue run src/agents/bugfix.ts --message "Hi"` — run an agent locally with env from 1Password (copy `.env.schema.example` to `.env.schema.local` first).
+- `ALLOW_LOCAL_SANDBOX=true npm run bugfix -- <ticket GID>` — start the bugfix agent on one Asana ticket (env from 1Password; copy `.env.schema.example` to `.env.schema.local` first). Each ticket has one Flue conversation (`bugfix-<GID>`, stored in `data/flue.db`) that later revisions continue.
+- `ALLOW_LOCAL_SANDBOX=true npm run review:sweep -- --apply` — drive open bot PRs (CI fixes, review subtask, revisions, merge). Dry run without `--apply`; `--unstick <PR>` clears a stuck PR.
 - `npm run asana:auth` — one-time OAuth consent for the Asana MCP app; prints the refresh token.
 - `npm run check:types` — typecheck.
 - `npx flue docs search <query>` — search the Flue docs from the terminal (then `flue docs read <path>`).

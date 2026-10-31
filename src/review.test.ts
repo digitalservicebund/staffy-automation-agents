@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { botTitle, ciState, fixBranch, parseReviewPrs, reviewSubtaskName, selectPrFeedback } from './review.ts';
+import { botTitle, ciState, conversationId, fixBranch, parseReviewPrs, reviewSubtaskName, selectPrFeedback } from './review.ts';
 
 test('review subtask name round-trips its PR numbers', () => {
 	assert.equal(reviewSubtaskName([12, 13]), '👀☑️ Review: staffy#12 staffy#13');
@@ -59,4 +59,9 @@ test('PR feedback keeps only allowlisted, non-empty items after the last push', 
 		{ author: 'Mike', createdAt: '2026-10-31T11:10:00.000Z', body: 'case-insensitive login' },
 	];
 	assert.deepEqual(selectPrFeedback(items, { logins: ['mike'], since }), ['Please add a test', 'case-insensitive login']);
+});
+
+test('conversation id is stable per ticket, so revisions continue the original run', () => {
+	assert.equal(conversationId('1219647123076485'), 'bugfix-1219647123076485');
+	assert.throws(() => conversationId('../etc'));
 });

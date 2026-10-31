@@ -8,8 +8,6 @@
 //
 // Dry run by default; pass --apply to act. At most one agent revision is
 // dispatched per run.
-import { spawn } from 'node:child_process';
-import { once } from 'node:events';
 import { BOT_MARK, evaluateApproval } from '../src/approval.ts';
 import { connectAsana, type AsanaClient } from '../src/connections/asana-client.ts';
 import {
@@ -27,7 +25,7 @@ import {
 } from '../src/connections/github.ts';
 import { decideNext, LIMITS, parseState, recordBudgetExceeded, recordDispatchFailure, serializeState, unstick, type BotState, type Decision } from '../src/lifecycle.ts';
 import { ciState, fixBranch, parseReviewPrs, reviewSubtaskName, selectPrFeedback, type CheckRun } from '../src/review.ts';
-import { BUDGET_EXIT_CODE, RUN_TOKEN_BUDGET } from '../src/budget.ts';
+import { canRunAgent, RunLimitHit, runBugfixAgent } from '../src/run-agent.ts';
 import { buildRevisionMessage } from '../src/revision.ts';
 import { branchDiff, prepareCheckout } from '../src/workspace.ts';
 
@@ -40,8 +38,7 @@ const apply = process.argv.includes('--apply');
 // `--unstick <pr>`: clear a stuck revision or halt on one PR (refunding the in-flight attempt), then exit.
 const unstickIndex = process.argv.indexOf('--unstick');
 const unstickPr = unstickIndex === -1 ? undefined : Number(process.argv[unstickIndex + 1]);
-// Same rule the agent enforces at startup; checked here so we never record an attempt we can't run.
-const canDispatch = Boolean(process.env.CI) || process.env.ALLOW_LOCAL_SANDBOX === 'true';
+const canDispatch = canRunAgent();
 const env = (name: string) => (process.env[name] ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 const projectGid = process.env.ASANA_BUG_PROJECT_GID ?? '';
 const approverGids = env('ASANA_APPROVER_GIDS');
@@ -104,9 +101,6 @@ async function say(ctx: Context, text: string) {
 // Runs the agent on the existing PR branch; its own tools push the result. If
 // the run fails, the attempt is refunded and the PR unlocked (repeated
 // failures halt), instead of waiting out the revision timeout.
-// The run hit a cost limit (token budget or time limit): halt, don't retry.
-class RunLimitHit extends Error {}
-
 async function dispatchRevision(ctx: Context, brief: string) {
 	try {
 		await runAgent(ctx, brief);
@@ -137,16 +131,7 @@ async function runAgent(ctx: Context, brief: string) {
 		diff: await branchDiff(),
 		brief,
 	});
-	// Inherit stdio: flue streams the agent's text, tool calls and status to stderr live.
-	const child = spawn('npx', ['flue', 'run', 'src/agents/bugfix.ts', '--message', message], {
-		env: process.env,
-		stdio: 'inherit',
-		timeout: LIMITS.agentRunMs,
-	});
-	const [code, signal] = (await once(child, 'exit')) as [number | null, NodeJS.Signals | null];
-	if (code === BUDGET_EXIT_CODE) throw new RunLimitHit(`the agent run hit its token budget (${RUN_TOKEN_BUDGET.toLocaleString('en')} tokens)`);
-	if (signal) throw new RunLimitHit(`the agent run hit its ${LIMITS.agentRunMs / 60_000} min time limit`);
-	if (code !== 0) throw new Error(`agent exited with code ${code}`);
+	await runBugfixAgent(ctx.ticket.gid, message);
 	log(`staffy#${ctx.pr.number}: agent finished`);
 }
 

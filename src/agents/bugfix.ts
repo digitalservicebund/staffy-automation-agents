@@ -1,5 +1,5 @@
 'use agent';
-import { CODING_MODEL, TRIAGE_MODEL } from '../providers/stackit.ts';
+import { CODING_MODEL, TRIAGE_CONTEXT_WINDOW, TRIAGE_MODEL } from '../providers/stackit.ts';
 import { enforceRunBudget } from '../budget.ts';
 import { useMcpConnection, useModel, useSandbox, useSubagent, useTool } from '@flue/runtime';
 import { local } from '@flue/runtime/node';
@@ -17,6 +17,8 @@ if (!projectGid) throw new Error('ASANA_BUG_PROJECT_GID is not set');
 if (!process.env.CI && process.env.ALLOW_LOCAL_SANDBOX !== 'true') {
 	throw new Error('Refusing to run model shell commands on this host: set ALLOW_LOCAL_SANDBOX=true (or run in CI).');
 }
+
+const COMPACT_AT_TOKENS = 60_000;
 
 // Hard token ceiling for the whole run, coder included.
 enforceRunBudget();
@@ -39,7 +41,13 @@ function Coder() {
 // change to `coder`, then submits it for review with `submit_fix`.
 export function Bugfix() {
 	// Thinking off: both STACKIT models think by default and it multiplied token use.
-	useModel(TRIAGE_MODEL, { thinkingLevel: 'off' });
+	useModel(TRIAGE_MODEL, {
+		thinkingLevel: 'off',
+		// Revisions continue the ticket's conversation, and every turn resends it. Flue
+		// compacts at contextWindow - reserveTokens; Gemma's 256k window would mean
+		// ~236k-token turns first. Summarise older history once it passes ~60k instead.
+		compaction: { reserveTokens: TRIAGE_CONTEXT_WINDOW - COMPACT_AT_TOKENS, keepRecentTokens: 12_000 },
+	});
 	// No secrets in the model's shell: local() passes only PATH/HOME-style essentials.
 	useSandbox(local({ cwd: WORKDIR }));
 	// Asana exposes ~50 tools; mount only what triage needs. Ticket edits (title, section) go

@@ -51,3 +51,10 @@ export function selectPrFeedback(items: readonly PrFeedbackItem[], { logins, sin
 		.sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
 		.map((i) => i.body.trim());
 }
+
+// Flue conversation id for a ticket. The first fix and every revision share
+// it, so the triage agent remembers the ticket, its approach and the coder's
+// reports. Validated like the branch name, since the GID is model-supplied.
+export function conversationId(ticketGid: string): string {
+	return fixBranch(ticketGid).replace('bot/asana-', 'bugfix-');
+}
