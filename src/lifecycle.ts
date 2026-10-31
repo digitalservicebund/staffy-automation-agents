@@ -9,8 +9,11 @@ export const LIMITS = {
 	ciFixes: 1,
 	// Revision rounds driven by human feedback per PR.
 	feedbackRounds: 3,
-	// A dispatched revision that hasn't pushed within this window is presumed dead.
-	revisionTimeoutMs: 2 * 60 * 60 * 1000,
+	// Hard wall-clock limit for one agent run; the sweep kills it after this.
+	agentRunMs: 30 * 60 * 1000,
+	// A dispatched revision that hasn't pushed within this window is presumed dead
+	// (longer than agentRunMs, so a run that is still allowed to work isn't declared dead).
+	revisionTimeoutMs: 45 * 60 * 1000,
 	// Agent runs that crash or can't start, per PR. Each is refunded; this many halts.
 	dispatchFailures: 2,
 } as const;
@@ -76,7 +79,7 @@ function settleRevision(state: BotState, o: Observation): Decision | BotState {
 		return { action: 'save', state: rest };
 	}
 	if (Date.parse(o.now) - Date.parse(revising.since) > LIMITS.revisionTimeoutMs) {
-		return halt(state, `the ${revising.reason} revision did not push within ${LIMITS.revisionTimeoutMs / 3_600_000}h`);
+		return halt(state, `the ${revising.reason} revision did not push within ${LIMITS.revisionTimeoutMs / 60_000} min`);
 	}
 	return { action: 'wait' };
 }
@@ -135,4 +138,11 @@ export function recordDispatchFailure(state: BotState, error: string): BotState 
 export function unstick(state: BotState): BotState {
 	const { halted: _halted, dispatchFailures: _failures, ...rest } = refund(state);
 	return rest;
+}
+
+// The run hit its token budget or time limit. Unlike a crash this is not refunded or
+// retried: a fix that needs more than the budget needs a human.
+export function recordBudgetExceeded(state: BotState, reason = 'the agent run hit its token budget'): BotState {
+	const { revising: _revising, ...rest } = state;
+	return { ...rest, halted: reason };
 }

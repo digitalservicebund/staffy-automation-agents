@@ -25,8 +25,9 @@ import {
 	writeBotState,
 	type PullRequest,
 } from '../src/connections/github.ts';
-import { decideNext, LIMITS, parseState, recordDispatchFailure, serializeState, unstick, type BotState, type Decision } from '../src/lifecycle.ts';
+import { decideNext, LIMITS, parseState, recordBudgetExceeded, recordDispatchFailure, serializeState, unstick, type BotState, type Decision } from '../src/lifecycle.ts';
 import { ciState, fixBranch, parseReviewPrs, reviewSubtaskName, selectPrFeedback, type CheckRun } from '../src/review.ts';
+import { BUDGET_EXIT_CODE, RUN_TOKEN_BUDGET } from '../src/budget.ts';
 import { prepareCheckout } from '../src/workspace.ts';
 
 const ACTIVE_SECTIONS = ['In Progress', 'Ready for Review'];
@@ -102,10 +103,19 @@ async function say(ctx: Context, text: string) {
 // Runs the agent on the existing PR branch; its own tools push the result. If
 // the run fails, the attempt is refunded and the PR unlocked (repeated
 // failures halt), instead of waiting out the revision timeout.
+// The run hit a cost limit (token budget or time limit): halt, don't retry.
+class RunLimitHit extends Error {}
+
 async function dispatchRevision(ctx: Context, brief: string) {
 	try {
 		await runAgent(ctx, brief);
 	} catch (err) {
+		if (err instanceof RunLimitHit) {
+			await saveState(ctx, recordBudgetExceeded(ctx.state, err.message));
+			const url = prUrl(ctx.pr.number);
+			await commentOnPr(ctx.pr.number, `Staffy Bot stopped automating this PR: ${err.message}. A human needs to take over.`);
+			return say(ctx, `Automation stopped on ${url}: ${err.message}. A human needs to take over.`);
+		}
 		const error = err instanceof Error ? err.message.split('\n')[0] : String(err);
 		const next = recordDispatchFailure(ctx.state, error);
 		await saveState(ctx, next);
@@ -117,7 +127,7 @@ async function dispatchRevision(ctx: Context, brief: string) {
 async function runAgent(ctx: Context, brief: string) {
 	log(`staffy#${ctx.pr.number}: preparing checkout of ${fixBranch(ctx.ticket.gid)} (git fetch + npm ci)…`);
 	await prepareCheckout(fixBranch(ctx.ticket.gid));
-	log(`staffy#${ctx.pr.number}: starting agent (timeout ${LIMITS.revisionTimeoutMs / 60_000} min); its activity follows`);
+	log(`staffy#${ctx.pr.number}: starting agent (timeout ${LIMITS.agentRunMs / 60_000} min); its activity follows`);
 	const message = [
 		`Revise the open PR ${prUrl(ctx.pr.number)} for Asana ticket ${ctx.ticket.gid}.`,
 		'This is a revision: do NOT call start_fix. Delegate to the coder, then call submit_fix with the same ticket GID.',
@@ -130,10 +140,12 @@ async function runAgent(ctx: Context, brief: string) {
 	const child = spawn('npx', ['flue', 'run', 'src/agents/bugfix.ts', '--message', message], {
 		env: process.env,
 		stdio: 'inherit',
-		timeout: LIMITS.revisionTimeoutMs,
+		timeout: LIMITS.agentRunMs,
 	});
 	const [code, signal] = (await once(child, 'exit')) as [number | null, NodeJS.Signals | null];
-	if (code !== 0) throw new Error(signal ? `agent killed by ${signal}` : `agent exited with code ${code}`);
+	if (code === BUDGET_EXIT_CODE) throw new RunLimitHit(`the agent run hit its token budget (${RUN_TOKEN_BUDGET.toLocaleString('en')} tokens)`);
+	if (signal) throw new RunLimitHit(`the agent run hit its ${LIMITS.agentRunMs / 60_000} min time limit`);
+	if (code !== 0) throw new Error(`agent exited with code ${code}`);
 	log(`staffy#${ctx.pr.number}: agent finished`);
 }
 

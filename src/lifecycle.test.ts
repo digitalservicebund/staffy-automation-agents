@@ -5,6 +5,7 @@ import {
 	INITIAL_STATE,
 	LIMITS,
 	parseState,
+	recordBudgetExceeded,
 	recordDispatchFailure,
 	unstick,
 	serializeState,
@@ -146,4 +147,22 @@ test('a CI fix also carries any outstanding reviewer feedback', () => {
 	const next = decideNext(INITIAL_STATE, obs({ ci: 'failure', failedChecks: ['static-analysis'], prFeedback: ['fix the type errors'] }));
 	assert.equal(next.action, 'fix_ci');
 	assert.deepEqual(next.action === 'fix_ci' && next.feedback, ['fix the type errors']);
+});
+
+test('the agent run limit is shorter than the in-flight lock timeout', () => {
+	assert.equal(LIMITS.agentRunMs, 30 * 60 * 1000);
+	assert.ok(LIMITS.revisionTimeoutMs > LIMITS.agentRunMs);
+});
+
+test('a run stopped by the token budget halts automation, refunding nothing further', () => {
+	const inFlight: BotState = { ciFixes: 1, feedbackRounds: 0, revising: { since: PUSH, reason: 'ci' } };
+	const next = recordBudgetExceeded(inFlight);
+	assert.equal(next.revising, undefined);
+	assert.match(next.halted ?? '', /token budget/);
+	assert.equal(next.ciFixes, 1);
+});
+
+test('a run stopped by the time limit halts with that reason', () => {
+	const next = recordBudgetExceeded({ ...INITIAL_STATE, ciFixes: 1 }, 'the agent run hit its 30 min time limit');
+	assert.equal(next.halted, 'the agent run hit its 30 min time limit');
 });

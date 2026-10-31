@@ -1,5 +1,6 @@
 'use agent';
 import { CODING_MODEL, TRIAGE_MODEL } from '../providers/stackit.ts';
+import { enforceRunBudget } from '../budget.ts';
 import { useMcpConnection, useModel, useSandbox, useSubagent, useTool } from '@flue/runtime';
 import { local } from '@flue/runtime/node';
 import { asana } from '../connections/asana.ts';
@@ -17,6 +18,9 @@ if (!process.env.CI && process.env.ALLOW_LOCAL_SANDBOX !== 'true') {
 	throw new Error('Refusing to run model shell commands on this host: set ALLOW_LOCAL_SANDBOX=true (or run in CI).');
 }
 
+// Hard token ceiling for the whole run, coder included.
+enforceRunBudget();
+
 // Code-editing delegate on the coding model. Gets no Asana or GitHub access:
 // it only sees the brief it is handed and the staffy checkout (via the shared sandbox).
 function Coder() {
@@ -32,7 +36,8 @@ function Coder() {
 // Triages a bug ticket from Asana and keeps it updated; delegates the code
 // change to `coder`, then submits it for review with `submit_fix`.
 export function Bugfix() {
-	useModel(TRIAGE_MODEL);
+	// Thinking off: both STACKIT models think by default and it multiplied token use.
+	useModel(TRIAGE_MODEL, { thinkingLevel: 'off' });
 	// No secrets in the model's shell: local() passes only PATH/HOME-style essentials.
 	useSandbox(local({ cwd: WORKDIR }));
 	// Asana exposes ~50 tools; mount only what triage needs. Ticket edits (title, section) go
@@ -46,6 +51,7 @@ export function Bugfix() {
 		description: 'Fixes one Staffy bug from a complete brief: failing test first, minimal fix, tests run.',
 		agent: Coder,
 		model: CODING_MODEL,
+		thinkingLevel: 'off',
 	});
 	useTool(startFix);
 	useTool(submitFix);
