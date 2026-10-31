@@ -8,8 +8,8 @@
 //
 // Dry run by default; pass --apply to act. At most one agent revision is
 // dispatched per run.
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { BOT_MARK, evaluateApproval } from '../src/approval.ts';
 import { connectAsana, type AsanaClient } from '../src/connections/asana-client.ts';
 import {
@@ -52,6 +52,9 @@ type Ticket = { gid: string; name: string };
 type Context = { asana: AsanaClient; ticket: Ticket; pr: PullRequest; runs: CheckRun[]; stateCommentId?: number; state: BotState };
 let dispatched = 0;
 
+// Timestamped progress line, so a long sweep is never silent.
+const log = (message: string) => console.log(`[${new Date().toISOString().slice(11, 19)}] ${message}`);
+
 async function observe(asana: AsanaClient, ticket: Ticket, pr: PullRequest) {
 	const sha = pr.head.sha;
 	const [runs, lastPush, stateComment, subtasks, items] = await Promise.all([
@@ -90,7 +93,11 @@ async function saveState(ctx: Context, state: BotState) {
 	ctx.state = state;
 }
 
-const say = (ctx: Context, text: string) => ctx.asana.comment(ctx.ticket.gid, `${BOT_MARK} ${text}`);
+// Comments on the Asana ticket and echoes it locally, so the console mirrors what the team sees.
+async function say(ctx: Context, text: string) {
+	log(`${ctx.ticket.gid} → Asana: ${text.split('\n')[0]}`);
+	await ctx.asana.comment(ctx.ticket.gid, `${BOT_MARK} ${text}`);
+}
 
 // Runs the agent on the existing PR branch; its own tools push the result. If
 // the run fails, the attempt is refunded and the PR unlocked (repeated
@@ -108,7 +115,9 @@ async function dispatchRevision(ctx: Context, brief: string) {
 }
 
 async function runAgent(ctx: Context, brief: string) {
+	log(`staffy#${ctx.pr.number}: preparing checkout of ${fixBranch(ctx.ticket.gid)} (git fetch + npm ci)…`);
 	await prepareCheckout(fixBranch(ctx.ticket.gid));
+	log(`staffy#${ctx.pr.number}: starting agent (timeout ${LIMITS.revisionTimeoutMs / 60_000} min); its activity follows`);
 	const message = [
 		`Revise the open PR ${prUrl(ctx.pr.number)} for Asana ticket ${ctx.ticket.gid}.`,
 		'This is a revision: do NOT call start_fix. Delegate to the coder, then call submit_fix with the same ticket GID.',
@@ -117,11 +126,15 @@ async function runAgent(ctx: Context, brief: string) {
 		brief,
 		'</revision-input>',
 	].join('\n');
-	await promisify(execFile)('npx', ['flue', 'run', 'src/agents/bugfix.ts', '--message', message], {
+	// Inherit stdio: flue streams the agent's text, tool calls and status to stderr live.
+	const child = spawn('npx', ['flue', 'run', 'src/agents/bugfix.ts', '--message', message], {
 		env: process.env,
+		stdio: 'inherit',
 		timeout: LIMITS.revisionTimeoutMs,
-		maxBuffer: 64 * 1024 * 1024,
 	});
+	const [code, signal] = (await once(child, 'exit')) as [number | null, NodeJS.Signals | null];
+	if (code !== 0) throw new Error(signal ? `agent killed by ${signal}` : `agent exited with code ${code}`);
+	log(`staffy#${ctx.pr.number}: agent finished`);
 }
 
 async function createReview(ctx: Context) {
@@ -177,7 +190,7 @@ async function sweepTicket(asana: AsanaClient, ticket: Ticket) {
 	const decision = decideNext(state, observation);
 	const needsAgent = decision.action === 'fix_ci' || decision.action === 'revise';
 	const deferral = !needsAgent ? '' : !canDispatch ? 'agent not allowed on this host; set ALLOW_LOCAL_SANDBOX=true' : dispatched >= MAX_DISPATCHES_PER_RUN ? 'one agent run per sweep' : '';
-	console.log(`${ticket.gid} staffy#${pr.number}: ${decision.action}${deferral ? ` (deferred: ${deferral})` : ''}${apply ? '' : ' (dry run)'}`);
+	log(`${ticket.gid} staffy#${pr.number}: ${decision.action}${deferral ? ` (deferred: ${deferral})` : ''}${apply ? '' : ' (dry run)'}`);
 	if (!apply || deferral) return;
 	if (needsAgent) dispatched++;
 	await act({ asana, ticket, pr, runs, stateCommentId, state }, decision);
@@ -188,7 +201,7 @@ async function unstickPullRequest(number: number) {
 	if (commentId === undefined) throw new Error(`staffy#${number} has no Staffy Bot state comment`);
 	const next = unstick(parseState(body));
 	await writeBotState(number, commentId, `Staffy Bot automation state — edited automatically, please don't change.\n\n${serializeState(next)}`);
-	console.log(`staffy#${number} unstuck: ${JSON.stringify(next)}`);
+	log(`staffy#${number} unstuck: ${JSON.stringify(next)}`);
 }
 
 if (unstickPr !== undefined) {
@@ -202,13 +215,14 @@ try {
 	let checked = 0;
 	for (const section of ACTIVE_SECTIONS) {
 		const tickets = await asana.tasksInSection(await asana.sectionGid(projectGid, section));
+		log(`${section}: ${tickets.length} ticket(s)`);
 		for (const ticket of tickets) {
 			// One ticket's failure (e.g. a transient API error) must not stop the others.
 			await sweepTicket(asana, ticket).catch((err: unknown) => console.error(`${ticket.gid}: ${String(err)}`));
 		}
 		checked += tickets.length;
 	}
-	console.log(`Checked ${checked} ticket(s)${apply ? '' : ' (dry run)'}.`);
+	log(`Checked ${checked} ticket(s)${apply ? '' : ' (dry run)'}.`);
 } finally {
 	await asana.close();
 }
