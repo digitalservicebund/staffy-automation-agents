@@ -13,7 +13,7 @@ Then copy `.env.schema.example` to `.env.schema.local` and point it at the `staf
 ## Talk to your agent
 
 ```sh
-npx varlock run -- npx flue run src/agents/bugfix.ts --message "Hi"
+ALLOW_LOCAL_SANDBOX=true npm run bugfix -- <ticket GID>
 ```
 
 Conversations are durable — pass `--id <id>` to continue one.
